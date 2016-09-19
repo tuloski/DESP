@@ -1,0 +1,629 @@
+//#include <stdio>
+//#include <stdlib.h>
+#include <iostream>
+#include <vector>
+#include <list>
+#include <queue>
+#include <array>
+#include "BinaryHeap.h"
+#include "Node.h"
+
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <sys/time.h>
+#include <ctime>
+#endif
+
+using namespace std;
+
+const static int dim = 100;  // dimension of the map dim*dim
+const static int nprim = 24;  // states in the primitive automaton
+
+int start = 12;
+int goal = 9764;
+
+int startIndex = nprim*dim*dim;
+int goalIndex = nprim*dim*dim + 1;
+
+
+
+
+
+/* Remove if already defined */
+typedef long long int64; typedef unsigned long long uint64;
+
+/* Returns the amount of milliseconds elapsed since the UNIX epoch. Works on both
+* windows and linux. */
+
+uint64 GetTimeMs64()
+{
+	/* Windows */
+	FILETIME ft;
+	LARGE_INTEGER li;
+
+	/* Get the amount of 100 nano seconds intervals elapsed since January 1, 1601 (UTC) and copy it
+	* to a LARGE_INTEGER structure. */
+	GetSystemTimeAsFileTime(&ft);
+	li.LowPart = ft.dwLowDateTime;
+	li.HighPart = ft.dwHighDateTime;
+
+	uint64 ret = li.QuadPart;
+	ret -= 116444736000000000LL; /* Convert from file time to UNIX epoch time. */
+	ret /= 10000; /* From 100 nano seconds (10^-7) to 1 millisecond (10^-3) intervals */
+
+	return ret;
+}
+
+class graph {
+public:
+	vector<node> nodes;
+};
+
+double heuristic(int x, int y, int MapDim = dim, int PrimDim = nprim);
+Key CalculateKey(node* pointer, double km);
+
+//******
+// MAIN
+//******
+
+int main() {
+	
+	
+	uint64 time;
+
+	int dim = 100;  // dimension of the map dim*dim
+	int nprim = 24;  // states in the primitive automaton
+
+	vector<int> Primitives;
+
+
+
+
+	// UP=1 RIGHT=2 DOWN=3 LEFT=4
+	Edge UP = { 1, 0 };
+	Edge RIGHT = { 2, 0 };
+	Edge DOWN = { 3, 0 };
+	Edge LEFT = { 4, 0 };
+
+	//******************
+	// Map creation loop
+	//******************
+
+
+
+	graph Map; // dim*dim map
+
+	Map.nodes.resize(dim*dim);
+
+
+	
+	for (int i = 0; i < dim*dim; i++){
+		
+		Map.nodes[i].MapState = i;
+
+		if (i % dim != 0){ //not left edge
+			Map.nodes[i].successors.push_back({ &Map.nodes[i - 1], LEFT}); // appending successor
+
+			Map.nodes[i - 1].predecessors.push_back({ &Map.nodes[i], LEFT}); // appending predecessor
+		}
+
+		if (i >(dim - 1)){ // not upper edge
+			Map.nodes[i].successors.push_back({ &Map.nodes[i - dim], UP});
+
+			Map.nodes[i - dim].predecessors.push_back({ &Map.nodes[i], UP});
+		}
+
+		if (i % dim != (dim - 1)){ //not right edge
+			Map.nodes[i].successors.push_back({ &Map.nodes[i + 1], RIGHT});
+
+			Map.nodes[i + 1].predecessors.push_back({ &Map.nodes[i], RIGHT});
+		}
+	
+		if (i < dim*(dim - 1)){ // not lower edge
+			Map.nodes[i].successors.push_back({ &Map.nodes[i + dim], DOWN });
+
+			Map.nodes[i + dim].predecessors.push_back({ &Map.nodes[i], DOWN });
+		}
+	}
+
+
+
+	
+	// debugging map
+
+	//for (int i = 0; i < Map.nodes[7].predecessors.size(); i++){
+	//	printf("%d\n", Map.nodes[7].predecessors[i].edge);
+	//}
+	//getchar();
+
+	
+	//***********
+	//Primitives
+	//**********
+	
+	graph Prim;
+	Prim.nodes.resize(nprim);
+
+	vector<int> marked_states;
+	marked_states.push_back(0);
+	marked_states.push_back(6);
+	marked_states.push_back(12);
+	marked_states.push_back(18);
+
+	// UP=1 
+	// RIGHT=2 
+	// DOWN=3 
+	// LEFT=4
+	Edge U = { 5, 1 };
+	Edge UR = { 6, 1.41421 };
+	Edge RU = { 7, 1.41421 };
+	Edge R = { 8, 1 };
+	Edge RD = { 9, 1.41421 };
+	Edge DR = { 10, 1.41421 };
+	Edge D = { 11, 1 };
+	Edge DL = { 12, 1.41421 };
+	Edge LD = { 13, 1.41421 };
+	Edge L = { 14, 1 };
+	Edge LU = { 15, 1.41421 };
+	Edge UL = { 16, 1.41421 };
+	Edge init = { 17, 0 };  // edges connecting the start to the initial marked states
+	Edge last = { 18, 0 };  // edges connecting the final marked states to the goal
+	int events = 16;
+
+    // Transitions
+		
+		// node 1 (UP)
+	Prim.nodes[0].successors.push_back({ &Prim.nodes[1], U });
+	Prim.nodes[1].predecessors.push_back({ &Prim.nodes[0], U });
+
+	Prim.nodes[1].successors.push_back({ &Prim.nodes[0], UP });
+	Prim.nodes[0].predecessors.push_back({ &Prim.nodes[1], UP });
+
+	    // UR
+	Prim.nodes[0].successors.push_back({ &Prim.nodes[2], UR });
+	Prim.nodes[2].predecessors.push_back({ &Prim.nodes[0], UR });
+
+	Prim.nodes[2].successors.push_back({ &Prim.nodes[3], UP });
+	Prim.nodes[3].predecessors.push_back({ &Prim.nodes[2], UP });
+
+	Prim.nodes[3].successors.push_back({ &Prim.nodes[6], RIGHT });
+	Prim.nodes[6].predecessors.push_back({ &Prim.nodes[3], RIGHT });
+
+	   //RU
+	Prim.nodes[6].successors.push_back({ &Prim.nodes[4], RU });
+	Prim.nodes[4].predecessors.push_back({ &Prim.nodes[6], RU });
+
+	Prim.nodes[4].successors.push_back({ &Prim.nodes[5], RIGHT });
+	Prim.nodes[5].predecessors.push_back({ &Prim.nodes[4], RIGHT });
+
+	Prim.nodes[5].successors.push_back({ &Prim.nodes[0], UP });
+	Prim.nodes[0].predecessors.push_back({ &Prim.nodes[5], UP });
+
+	   // RIGHT
+	Prim.nodes[6].successors.push_back({ &Prim.nodes[7], R });
+	Prim.nodes[7].predecessors.push_back({ &Prim.nodes[6], R });
+
+	Prim.nodes[7].successors.push_back({ &Prim.nodes[6], RIGHT });
+	Prim.nodes[6].predecessors.push_back({ &Prim.nodes[7], RIGHT });
+
+	int a = 6;
+	int b = 8;
+	int c = 9;
+	int d = 12;
+
+	 // RD
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], RD });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], RD });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], RIGHT });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], RIGHT });
+
+	Prim.nodes[c].successors.push_back({ &Prim.nodes[d], DOWN });
+	Prim.nodes[d].predecessors.push_back({ &Prim.nodes[c], DOWN });
+
+	 //DR
+
+	a = 12; b = 10; c = 11; d = 6;
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], DR });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], DR });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], DOWN });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], DOWN });
+
+	Prim.nodes[c].successors.push_back({ &Prim.nodes[d], RIGHT });
+	Prim.nodes[d].predecessors.push_back({ &Prim.nodes[c], RIGHT });
+
+	  //D
+
+	a = 12; b = 13; c = 12;
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], D });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], D });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], DOWN });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], DOWN });
+	
+	  //DL
+
+	a = 12; b = 14; c = 15; d = 18;
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], DL });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], DL });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], DOWN });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], DOWN });
+
+	Prim.nodes[c].successors.push_back({ &Prim.nodes[d], LEFT });
+	Prim.nodes[d].predecessors.push_back({ &Prim.nodes[c], LEFT });
+
+	  //LD
+
+	a = 18; b = 16; c = 17; d = 12;
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], LD });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], LD });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], LEFT });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], LEFT });
+
+	Prim.nodes[c].successors.push_back({ &Prim.nodes[d], DOWN });
+	Prim.nodes[d].predecessors.push_back({ &Prim.nodes[c], DOWN });
+
+	//L
+
+	a = 18; b = 19; c = 18;
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], L });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], L });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], LEFT });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], LEFT });
+
+	//LU
+
+	a = 18; b = 20; c = 21; d = 0;
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], LU });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], LU });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], LEFT });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], LEFT });
+
+	Prim.nodes[c].successors.push_back({ &Prim.nodes[d], UP });
+	Prim.nodes[d].predecessors.push_back({ &Prim.nodes[c], UP });
+
+	//UL
+
+	a = 0; b = 22; c = 23; d = 18;
+
+	Prim.nodes[a].successors.push_back({ &Prim.nodes[b], UL });
+	Prim.nodes[b].predecessors.push_back({ &Prim.nodes[a], UL });
+
+	Prim.nodes[b].successors.push_back({ &Prim.nodes[c], UP });
+	Prim.nodes[c].predecessors.push_back({ &Prim.nodes[b], UP });
+
+	Prim.nodes[c].successors.push_back({ &Prim.nodes[d], LEFT });
+	Prim.nodes[d].predecessors.push_back({ &Prim.nodes[c], LEFT });
+
+	for (int i = 0; i < nprim; i++){
+		Prim.nodes[i].MapState = i;
+	}
+
+	//Debugging Prim
+
+	//for (int i = 0; i < Prim.nodes[6].successors.size(); i++){
+	//	printf("%d\n", Prim.nodes[6].successors[i].edge);
+	//}
+	//getchar();
+
+	
+	//***********************
+	// PARALLEL COMPOSITION
+	//**********************
+
+	graph Comp;
+
+	Comp.nodes.resize(nprim*dim*dim+2);
+
+
+	
+
+	for (int i = 0; i < nprim; i++){  // cycle over primitives automaton state
+
+		for (int k = 0; k < dim*dim; k++){ // cycle over map automaton state
+
+			for (unsigned int j = 0; j < Prim.nodes[i].successors.size(); j++){ // cycle over the successors of the primitive state
+
+				if (Prim.nodes[i].successors[j].edge.name < 5){     //event shared
+					for (unsigned int l = 0; l < Map.nodes[k].successors.size(); l++){  //cycle on the successors of the map node
+						if (Prim.nodes[i].successors[j].edge.name == Map.nodes[k].successors[l].edge.name){  //if the edges are the same
+
+							//int indexPrim = Prim.nodes[i].successors[j].next - &Prim.nodes[0];
+							//int indexMap = Map.nodes[k].successors[l].next - &Map.nodes[0];
+
+							Comp.nodes[k*nprim + i].successors.push_back({ &Comp.nodes[Map.nodes[k].successors[l].next->MapState * nprim + Prim.nodes[i].successors[j].next->MapState], Map.nodes[k].successors[l].edge });
+							Comp.nodes[k*nprim + i].MapState = k;
+
+							Comp.nodes[Map.nodes[k].successors[l].next->MapState * nprim + Prim.nodes[i].successors[j].next->MapState].predecessors.push_back({ &Comp.nodes[k*nprim + i], Map.nodes[k].successors[l].edge });
+							Comp.nodes[Map.nodes[k].successors[l].next->MapState * nprim + Prim.nodes[i].successors[j].next->MapState].MapState = Map.nodes[k].successors[l].next->MapState;
+
+						}
+					}
+				}
+
+				if (Prim.nodes[i].successors[j].edge.name > 4 && Prim.nodes[i].successors[j].edge.name < events + 1){     //event not-shared
+
+					//int indexPrim = Prim.nodes[i].successors[j].next - &Prim.nodes[0];
+
+					Comp.nodes[k*nprim + i].successors.push_back({ &Comp.nodes[k*nprim + Prim.nodes[i].successors[j].next->MapState], Prim.nodes[i].successors[j].edge });
+					Comp.nodes[k*nprim + i].MapState = k;
+
+					Comp.nodes[k*nprim + Prim.nodes[i].successors[j].next->MapState].predecessors.push_back({ &Comp.nodes[k*nprim + i], Prim.nodes[i].successors[j].edge });
+					Comp.nodes[k*nprim + Prim.nodes[i].successors[j].next->MapState].MapState = k;
+				}
+			}
+		}
+	}
+
+
+
+
+	//Debugging Parallel Composition
+
+	//for (int i = 0; i < Comp.nodes[1].predecessors.size(); i++){
+	//	printf("%d\n", Comp.nodes[1].predecessors[i].edge);
+	//}
+	//getchar();
+
+	
+	
+	
+	
+	//**********
+	// D* Lite
+	//**********
+
+
+
+	
+	//choose goal and start and add them to the Parallel Composition Automaton
+
+
+	for (unsigned int i = 0; i < marked_states.size(); i++){   //start
+		
+		Comp.nodes[nprim*dim*dim].successors.push_back({ &Comp.nodes[start*nprim + marked_states[i]], init }); //add the successors of the start node
+		Comp.nodes[start*nprim + marked_states[i]].predecessors.push_back({ &Comp.nodes[nprim*dim*dim], init });  // add the start node as predecessor
+
+		Comp.nodes[nprim*dim*dim+1].predecessors.push_back({ &Comp.nodes[goal*nprim + marked_states[i]], last });  //add the predecessors of the last node
+		Comp.nodes[goal*nprim + marked_states[i]].successors.push_back({ &Comp.nodes[nprim*dim*dim+1], last });  // add the last node as successor
+	} 
+
+	Comp.nodes[nprim*dim*dim].MapState = start;
+	Comp.nodes[nprim*dim*dim + 1].MapState = goal;
+
+	//for (int i = 0; i < Comp.nodes[nprim*dim*dim + 1].predecessors.size(); i++){
+	//	printf("%d\n", Comp.nodes[nprim*dim*dim + 1].predecessors[i].next->MapState);
+	//}
+	//getchar();
+
+
+	//Debugging Initialization
+
+	//for (int i = 0; i < Comp.nodes[nprim*dim*dim].successors.size(); i++){
+	//	printf("%d\n", Comp.nodes[nprim*dim*dim].successors[i].edge);
+	//}
+	//getchar();
+
+
+
+
+
+	// D* Lite algorithm
+
+	BinaryHeap heap;
+
+	node* StartNode = &Comp.nodes[startIndex];
+	node* GoalNode = &Comp.nodes[goalIndex];
+	node* LastNode;
+	node ForPath;
+	node* FPath = &ForPath;
+
+
+	// Initialize
+	double km = 0;
+
+	GoalNode->rhs = 0;
+	GoalNode->k.k1 = heuristic(GoalNode->MapState,StartNode->MapState);
+	//printf("%f", GoalNode->k.k1);
+	GoalNode->k.k2 = 0;
+
+	heap.Insert(GoalNode);
+
+	Key kold;
+	Key knew;
+	node* s;
+	node* u;
+	double gold;
+	int counter=0;
+
+	//heap.Resize(10000000);
+
+	time = GetTimeMs64();
+	//printf("pino\n");
+	// for this "while" loop refer to "D*Lite (optimized version)" by Koenig and Likhachev
+
+
+
+	while (heap.ExtractMin()->k < CalculateKey(StartNode, km) || StartNode->rhs > StartNode->g){
+		
+		u = heap.ExtractMin();
+		kold = u->k;
+		knew = CalculateKey(u, km);
+
+
+
+		//printf("%d\n", u->MapState);
+
+
+		if (kold < knew)
+			heap.Update(knew,u->HeapIndex);
+
+		else if (u->g > u->rhs){
+
+			u->g = u->rhs;
+			heap.RemoveV(u->HeapIndex);
+
+
+
+			for (unsigned int i = 0; i < u->predecessors.size(); i++){
+
+				s = u->predecessors[i].next;
+
+				if (s != GoalNode)
+					s->rhs = min(s->rhs, u->g + u->predecessors[i].edge.cost);
+
+				// UpdateVertex
+				if (s->g != s->rhs && s->InQueue)
+					heap.Update(CalculateKey(s, km), s->HeapIndex);
+
+				else if (s->g != s->rhs && !s->InQueue){
+					s->k = CalculateKey(s, km);
+					heap.Insert(s);
+				}
+				else if (s->g == s->rhs && s->InQueue)
+					heap.RemoveV(s->HeapIndex);
+				//
+			}
+		}
+
+		else{
+			gold = u->g;
+			u->g = DBL_MAX;
+			if (u->rhs == gold){
+				if (u != GoalNode){
+					for (unsigned int i = 0; i < u->successors.size(); i++){
+						u->rhs = min(u->rhs, u->successors[i].edge.cost + u->successors[i].next->g);
+					}
+				}
+			}
+			// UpdateVertex
+			if (u->g != u->rhs && u->InQueue)
+				heap.Update(CalculateKey(u, km), u->HeapIndex);
+
+			else if (u->g != u->rhs && !u->InQueue){
+				u->k = CalculateKey(u, km);
+				heap.Insert(u);
+			}
+			else if (u->g == u->rhs && u->InQueue)
+				heap.RemoveV(u->HeapIndex);
+			//
+
+			for (unsigned int i = 0; i < u->predecessors.size(); i++){
+
+				s = u->predecessors[i].next;
+				if (s != GoalNode){
+					for (unsigned int i = 0; i < s->successors.size(); i++){
+						s->rhs = min(s->rhs, s->successors[i].edge.cost + s->successors[i].next->g);
+					}
+				}
+
+				// UpdateVertex
+				if (s->g != s->rhs && s->InQueue)
+					heap.Update(CalculateKey(s, km), s->HeapIndex);
+
+				else if (s->g != s->rhs && !s->InQueue){
+					s->k = CalculateKey(s, km);
+					heap.Insert(s);
+				}
+				else if (s->g == s->rhs && s->InQueue)
+					heap.RemoveV(s->HeapIndex);
+				//
+			}
+
+
+		}
+	}
+
+	printf("%f\n", StartNode->rhs);
+	time = GetTimeMs64() - time;
+	printf("time:%llu\n", time);
+
+	//***********
+	//Da qui in giù ci sto lavorando! (escluse le funzioni alla fine)
+	//***********
+
+
+	// COMPUTE PATH
+
+	ForPath = Comp.nodes[startIndex];
+	int sizeSucc;
+	double MinCost;
+	int MinName;
+	unsigned int IndexSucc;
+
+	//for (unsigned int i = 0; i < FPath->successors[1].next->successors.size(); i++){
+		
+	//	printf("%.2f\n", FPath->successors[1].next->successors[i].next->g);
+	//}
+	printf("%f\n",GoalNode->g);
+	while (FPath != GoalNode){
+
+		sizeSucc = FPath->successors.size();
+		MinCost = FPath->successors[0].edge.cost + FPath->successors[0].next->g;
+		MinName = FPath->successors[0].edge.name;
+		IndexSucc = 0;
+
+		for (unsigned int i = 1; i < sizeSucc; i++){
+			if (MinCost > (FPath->successors[i].edge.cost + FPath->successors[i].next->g)){
+				MinCost = FPath->successors[i].edge.cost + FPath->successors[i].next->g;
+				MinName = FPath->successors[0].edge.name;
+				IndexSucc = i;
+			}
+		}
+		
+		Primitives.push_back(MinName);
+		FPath = FPath->successors[IndexSucc].next;
+		printf("%d+%d,", FPath->MapState,MinName);
+	}
+
+	for (unsigned int i = Primitives.size() - 1; i > -1; i--){
+
+		printf("&d", Primitives[i]);
+	}
+	getchar();
+	// REPLANNING
+
+
+	return 0;
+}
+
+
+double heuristic(int x, int y, int MapDim, int PrimDim){
+
+	int diffRow = (x / MapDim) - (y / MapDim);
+	int diffCol = (x - (x / MapDim)*MapDim) - (y - ((y / MapDim))*MapDim);
+
+	int const mask = diffRow >> sizeof(int)* CHAR_BIT - 1;
+	int const mask2 = diffCol >> sizeof(int)* CHAR_BIT - 1;
+
+	int absRow = (diffRow ^ mask) - mask;
+	int absCol = (diffCol ^ mask2) - mask2;
+
+	int minEdge = absRow ^ ((absCol ^ absRow) & -(absCol < absRow));
+	int maxEdge = absRow ^ ((absRow ^ absCol) & -(absRow < absCol));
+
+	return minEdge*(1.41421 - 1) + maxEdge;
+}
+
+Key CalculateKey(node* pointer, double km){
+
+	Key val;
+
+	val.k1 = min(pointer->g, pointer->rhs + heuristic(pointer->MapState, start) + km);
+	val.k2 = min(pointer->g, pointer->rhs);
+
+	return val;
+}
